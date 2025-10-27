@@ -7,10 +7,9 @@ RUN pacman -Sy --noconfirm --disable-download-timeout \
     xorg-server-xvfb wget octave \
     qt5-base qt5-svg \
     inkscape pandoc \
-    openblas lapack gcc-fortran pkgconf cmake base-devel \
+    pkgconf  \
     libpng libjpeg-turbo libtiff freetype2 fontconfig harfbuzz \
     mesa libx11 libxext libxrender libsm libxrandr \
-    tcl tk \
     texlive-basic texlive-bin texlive-fontsrecommended \
     texlive-latexextra texlive-xetex texlive-plaingeneric
 
@@ -41,8 +40,8 @@ RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkg
 RUN conda install --yes python=3.11 jupyter ipykernel pandas seaborn \
     nbconvert texlive-core pandoc pyqt \
     numpy xarray scipy matplotlib sympy scikit-learn \
-    jax jaxlib autograd tensorflow pytorch torchvision torchaudio \
-    keras ipykernel 
+    jax jaxlib autograd tensorflow pytorch \
+    keras 
 # Install octave-kernel, texinfo, sagemath from conda-forge
 RUN conda config --add channels conda-forge && \
     conda tos accept && \
