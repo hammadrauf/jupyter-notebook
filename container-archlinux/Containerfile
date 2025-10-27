@@ -6,8 +6,12 @@ FROM archlinux:latest
 RUN pacman -Sy --noconfirm --disable-download-timeout \
     xorg-server-xvfb wget octave \
     qt5-base qt5-svg \
-    inkscape pandoc texlive-basic \
-    texlive-bin texlive-fontsrecommended \
+    inkscape pandoc \
+    openblas lapack gcc-fortran pkgconf cmake base-devel \
+    libpng libjpeg-turbo libtiff freetype2 fontconfig harfbuzz \
+    mesa libx11 libxext libxrender libsm libxrandr \
+    tcl tk \
+    texlive-basic texlive-bin texlive-fontsrecommended \
     texlive-latexextra texlive-xetex texlive-plaingeneric
 
 RUN pacman -Scc --noconfirm    
@@ -34,7 +38,11 @@ RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkg
     conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
 
 # Create a conda environment and install packages
-RUN conda install --yes python=3.11 jupyter ipykernel pandas seaborn nbconvert texlive-core pandoc pyqt
+RUN conda install --yes python=3.11 jupyter ipykernel pandas seaborn \
+    nbconvert texlive-core pandoc pyqt \
+    numpy xarray scipy matplotlib sympy scikit-learn \
+    jax jaxlib autograd tensorflow pytorch torchvision torchaudio \
+    keras ipykernel 
 # Install octave-kernel, texinfo, sagemath from conda-forge
 RUN conda config --add channels conda-forge && \
     conda tos accept && \
