@@ -60,4 +60,4 @@ VOLUME ["/workspace/notebooks"]
 EXPOSE 8888
 
 CMD Xvfb :1 -screen 0 1024x768x24 & \
-    jupyter notebook --notebook-dir=/workspace/notebooks --ip=0.0.0.0 --no-browser --allow-root
+    jupyter lab --notebook-dir=/workspace/notebooks --ip=0.0.0.0 --no-browser --allow-root
