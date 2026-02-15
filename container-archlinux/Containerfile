@@ -1,5 +1,8 @@
 FROM archlinux:latest
 
+
+RUN pacman -Syu --noconfirm
+
 # Disable pacman timeout on slow repo mirrors.
 # RUN pacman -Syu --disable-download-timeout --noconfirm
 # Update package database and install dependencies
