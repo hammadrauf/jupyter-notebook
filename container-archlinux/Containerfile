@@ -1,6 +1,5 @@
 FROM archlinux:latest
 
-
 RUN pacman -Syu --noconfirm
 
 # Disable pacman timeout on slow repo mirrors.
