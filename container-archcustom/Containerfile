@@ -1,0 +1,127 @@
+FROM --platform=$TARGETPLATFORM alpine:3.20 AS archrootfs
+
+ARG TARGETARCH
+
+# Build an Arch root filesystem that matches the target architecture.
+RUN set -eux; \
+		apk add --no-cache bash ca-certificates curl tar zstd; \
+		mkdir -p /rootfs /tmp/bootstrap; \
+		case "$TARGETARCH" in \
+			amd64) \
+				curl -fsSL -o /tmp/bootstrap/rootfs.tar.zst \
+					"https://geo.mirror.pkgbuild.com/iso/latest/archlinux-bootstrap-x86_64.tar.zst"; \
+				tar --use-compress-program=unzstd -xf /tmp/bootstrap/rootfs.tar.zst -C /tmp/bootstrap; \
+				rootdir="$(find /tmp/bootstrap -maxdepth 1 -type d -name 'root.*' | head -n 1)"; \
+				cp -a "$rootdir"/. /rootfs/; \
+				;; \
+			arm64) \
+				curl -fsSL -o /tmp/bootstrap/rootfs.tar.gz \
+					"https://de3.mirror.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz"; \
+				tar -xzf /tmp/bootstrap/rootfs.tar.gz -C /rootfs; \
+				;; \
+			*) \
+				echo "Unsupported TARGETARCH: $TARGETARCH" >&2; \
+				exit 1; \
+				;; \
+		esac; \
+		rm -rf /tmp/bootstrap
+
+FROM scratch
+
+ARG TARGETARCH
+
+COPY --from=archrootfs /rootfs/ /
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Initialize pacman and keyring, then update base packages.
+RUN set -eux; \
+		mkdir -p /etc/pacman.d; \
+		if [[ "$TARGETARCH" == "arm64" ]]; then \
+			printf '%s\n' 'Server = https://de3.mirror.archlinuxarm.org/$arch/$repo' > /etc/pacman.d/mirrorlist; \
+		else \
+			printf '%s\n' 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /etc/pacman.d/mirrorlist; \
+		fi; \
+		sed -i 's/^#\?DownloadUser.*/DownloadUser = root/' /etc/pacman.conf; \
+		pacman-key --init; \
+		if [[ "$TARGETARCH" == "arm64" ]]; then \
+			pacman-key --populate archlinuxarm || pacman-key --populate; \
+		else \
+			pacman-key --populate archlinux || pacman-key --populate; \
+		fi; \
+		pacman -Syu --noconfirm --disable-download-timeout --disable-sandbox
+
+# Install system dependencies.
+RUN set -eux; \
+		packages=( \
+			xorg-server-xvfb wget octave \
+			qt5-base qt5-svg \
+			texlive-basic texlive-bin texlive-fontsrecommended \
+			texlive-latexextra texlive-xetex texlive-plaingeneric \
+		); \
+		for optional_pkg in inkscape; do \
+			if pacman -Si "$optional_pkg" >/dev/null 2>&1; then \
+				packages+=("$optional_pkg"); \
+			fi; \
+		done; \
+		pacman -S --noconfirm --disable-download-timeout --disable-sandbox --needed "${packages[@]}"
+
+RUN pacman -Scc --noconfirm
+
+ENV OCTAVE_EXECUTABLE=/usr/bin/octave
+ENV DISPLAY=:1
+ENV JUPYTER_TOKEN=
+ENV JUPYTER_BASE_URL=/
+ENV JUPYTER_ALLOW_ORIGIN='\d+\.\d+\.\d+\.\d+|localhost|127\.0\.0\.1'
+ENV JUPYTER_LISTEN_IP='0.0.0.0'
+ENV JUPYTER_ALLOW_REMOTE_ACCESS=1
+
+# Install Miniconda for the target architecture.
+ENV CONDA_DIR=/opt/conda
+RUN set -eux; \
+		case "$TARGETARCH" in \
+			amd64) conda_arch="x86_64" ;; \
+			arm64) conda_arch="aarch64" ;; \
+			*) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+		esac; \
+		wget --quiet "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-${conda_arch}.sh" -O /tmp/miniconda.sh; \
+		bash /tmp/miniconda.sh -b -p "$CONDA_DIR"; \
+		rm /tmp/miniconda.sh
+
+ENV PATH=/opt/conda/bin:$PATH
+
+RUN "$CONDA_DIR/bin/pip" install --upgrade pip
+
+# Accept Anaconda Terms of Service for required channels.
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+		conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
+# Create conda environment and install packages.
+RUN conda install --yes python=3.11 jupyter ipykernel pandas seaborn nbconvert texlive-core pyqt
+
+RUN conda config --add channels conda-forge && \
+		conda tos accept && \
+		conda config --set channel_priority strict && \
+		conda install --yes octave_kernel texinfo sage pandoc "future>=0.18.3" && \
+		command -v pandoc && pandoc --version | head -n 1 && \
+		conda clean --all -f -y
+
+# Configure Jupyter and octave-kernel.
+RUN mkdir -p /root/.jupyter/nbconvert/templates/latex && \
+		echo "c.OctaveKernel.plot_settings = dict(backend='qt')" > /root/.jupyter/octave_kernel_config.py && \
+		echo "c.NbConvertApp.export_format = 'latex'" > /root/.jupyter/jupyter_nbconvert_config.py && \
+		echo "c.NbConvertApp.template_file = 'basic'" >> /root/.jupyter/jupyter_nbconvert_config.py && \
+		echo "import os" > /root/.jupyter/jupyter_server_config.py && \
+		echo "c.IdentityProvider.token = os.environ.get('JUPYTER_TOKEN', '')" >> /root/.jupyter/jupyter_server_config.py && \
+		echo "c.NotebookApp.base_url = os.environ.get('JUPYTER_BASE_URL', '/')" >> /root/.jupyter/jupyter_server_config.py && \
+		echo "c.ServerApp.base_url = os.environ.get('JUPYTER_BASE_URL', '/')" >> /root/.jupyter/jupyter_server_config.py && \
+		echo "c.ServerApp.allow_origin = os.environ.get('JUPYTER_ALLOW_ORIGIN', '\\d+\\.\\d+\\.\\d+\\.\\d+|localhost|127\\.0\\.0\\.1')" >> /root/.jupyter/jupyter_server_config.py && \
+		echo "c.ServerApp.ip = os.environ.get('JUPYTER_LISTEN_IP', '0.0.0.0')" >> /root/.jupyter/jupyter_server_config.py && \
+		echo "c.ServerApp.allow_remote_access = bool(int(os.environ.get('JUPYTER_ALLOW_REMOTE_ACCESS', '1')))" >> /root/.jupyter/jupyter_server_config.py
+
+WORKDIR /workspace
+VOLUME ["/workspace/notebooks"]
+EXPOSE 8888
+
+CMD Xvfb :1 -screen 0 1024x768x24 & \
+		jupyter lab --notebook-dir=/workspace/notebooks --ip=0.0.0.0 --no-browser --allow-root
