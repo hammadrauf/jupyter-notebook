@@ -16,7 +16,7 @@ RUN set -eux; \
 				;; \
 			arm64) \
 				curl -fsSL -o /tmp/bootstrap/rootfs.tar.gz \
-					"https://mirror.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz"; \
+					"https://de3.mirror.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz"; \
 				tar -xzf /tmp/bootstrap/rootfs.tar.gz -C /rootfs; \
 				;; \
 			*) \
@@ -38,20 +38,27 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -eux; \
 		mkdir -p /etc/pacman.d; \
 		if [[ "$TARGETARCH" == "arm64" ]]; then \
-			printf '%s\n' 'Server = https://mirror.archlinuxarm.org/$arch/$repo' > /etc/pacman.d/mirrorlist; \
+			printf '%s\n' 'Server = https://de3.mirror.archlinuxarm.org/$arch/$repo' > /etc/pacman.d/mirrorlist; \
 		else \
 			printf '%s\n' 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /etc/pacman.d/mirrorlist; \
 		fi; \
+		sed -i 's/^#\?DownloadUser.*/DownloadUser = root/' /etc/pacman.conf; \
 		pacman-key --init; \
 		if [[ "$TARGETARCH" == "arm64" ]]; then \
 			pacman-key --populate archlinuxarm || pacman-key --populate; \
 		else \
 			pacman-key --populate archlinux || pacman-key --populate; \
 		fi; \
-		pacman -Syu --noconfirm --disable-download-timeout
+		pacman -Syu --noconfirm --disable-download-timeout --disable-sandbox || pacman -Syu --noconfirm --disable-download-timeout
 
 # Install system dependencies
-RUN pacman -Sy --noconfirm --disable-download-timeout \
+RUN pacman -Sy --noconfirm --disable-download-timeout --disable-sandbox \
+		xorg-server-xvfb wget octave \
+		qt5-base qt5-svg \
+		inkscape pandoc texlive-basic \
+		texlive-bin texlive-fontsrecommended \
+		texlive-latexextra texlive-xetex texlive-plaingeneric || \
+	pacman -Sy --noconfirm --disable-download-timeout \
 		xorg-server-xvfb wget octave \
 		qt5-base qt5-svg \
 		inkscape pandoc texlive-basic \
