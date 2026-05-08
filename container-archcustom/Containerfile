@@ -49,21 +49,22 @@ RUN set -eux; \
 		else \
 			pacman-key --populate archlinux || pacman-key --populate; \
 		fi; \
-		pacman -Syu --noconfirm --disable-download-timeout --disable-sandbox || pacman -Syu --noconfirm --disable-download-timeout
+		pacman -Syu --noconfirm --disable-download-timeout --disable-sandbox
 
-# Install system dependencies
-RUN pacman -Sy --noconfirm --disable-download-timeout --disable-sandbox \
-		xorg-server-xvfb wget octave \
-		qt5-base qt5-svg \
-		inkscape pandoc texlive-basic \
-		texlive-bin texlive-fontsrecommended \
-		texlive-latexextra texlive-xetex texlive-plaingeneric || \
-	pacman -Sy --noconfirm --disable-download-timeout \
-		xorg-server-xvfb wget octave \
-		qt5-base qt5-svg \
-		inkscape pandoc texlive-basic \
-		texlive-bin texlive-fontsrecommended \
-		texlive-latexextra texlive-xetex texlive-plaingeneric
+# Install system dependencies.
+RUN set -eux; \
+		packages=( \
+			xorg-server-xvfb wget octave \
+			qt5-base qt5-svg \
+			texlive-basic texlive-bin texlive-fontsrecommended \
+			texlive-latexextra texlive-xetex texlive-plaingeneric \
+		); \
+		for optional_pkg in inkscape; do \
+			if pacman -Si "$optional_pkg" >/dev/null 2>&1; then \
+				packages+=("$optional_pkg"); \
+			fi; \
+		done; \
+		pacman -S --noconfirm --disable-download-timeout --disable-sandbox --needed "${packages[@]}"
 
 RUN pacman -Scc --noconfirm
 
@@ -96,12 +97,13 @@ RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkg
 		conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
 
 # Create conda environment and install packages.
-RUN conda install --yes python=3.11 jupyter ipykernel pandas seaborn nbconvert texlive-core pandoc pyqt
+RUN conda install --yes python=3.11 jupyter ipykernel pandas seaborn nbconvert texlive-core pyqt
 
 RUN conda config --add channels conda-forge && \
 		conda tos accept && \
 		conda config --set channel_priority strict && \
-		conda install --yes octave_kernel texinfo sage "future>=0.18.3" && \
+		conda install --yes octave_kernel texinfo sage pandoc "future>=0.18.3" && \
+		command -v pandoc && pandoc --version | head -n 1 && \
 		conda clean --all -f -y
 
 # Configure Jupyter and octave-kernel.
