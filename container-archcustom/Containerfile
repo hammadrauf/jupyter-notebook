@@ -16,7 +16,7 @@ RUN set -eux; \
 				;; \
 			arm64) \
 				curl -fsSL -o /tmp/bootstrap/rootfs.tar.gz \
-					"https://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz"; \
+					"https://mirror.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz"; \
 				tar -xzf /tmp/bootstrap/rootfs.tar.gz -C /rootfs; \
 				;; \
 			*) \
@@ -36,6 +36,12 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Initialize pacman and keyring, then update base packages.
 RUN set -eux; \
+		mkdir -p /etc/pacman.d; \
+		if [[ "$TARGETARCH" == "arm64" ]]; then \
+			printf '%s\n' 'Server = https://mirror.archlinuxarm.org/$arch/$repo' > /etc/pacman.d/mirrorlist; \
+		else \
+			printf '%s\n' 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /etc/pacman.d/mirrorlist; \
+		fi; \
 		pacman-key --init; \
 		if [[ "$TARGETARCH" == "arm64" ]]; then \
 			pacman-key --populate archlinuxarm || pacman-key --populate; \
